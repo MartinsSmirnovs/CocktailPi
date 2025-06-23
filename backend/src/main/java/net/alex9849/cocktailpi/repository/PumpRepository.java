@@ -4,10 +4,16 @@ import jakarta.annotation.PostConstruct;
 import jakarta.persistence.DiscriminatorValue;
 import net.alex9849.cocktailpi.model.gpio.GpioBoard;
 import net.alex9849.cocktailpi.model.pump.*;
+import net.alex9849.cocktailpi.utils.PinUtils;
+import net.alex9849.cocktailpi.utils.SpringUtility;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.support.JdbcDaoSupport;
 import org.springframework.stereotype.Component;
+
+import com.pi4j.io.gpio.digital.PullResistance;
+import net.alex9849.motorlib.pin.Pi4JInputPin;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -155,7 +161,7 @@ public class PumpRepository extends JdbcDaoSupport {
             pstmt.setNull(17, Types.INTEGER);
             pstmt.setNull(18, Types.INTEGER);
         }
-        else if (pump instanceof StepperPump stepperPump) {
+else if (pump instanceof StepperPump stepperPump) {
             pstmt.setNull(8, Types.INTEGER);
             pstmt.setNull(9, Types.INTEGER);
             pstmt.setNull(10, Types.INTEGER);
@@ -236,6 +242,35 @@ public class PumpRepository extends JdbcDaoSupport {
         }
         pump.setFillingLevelInMl((Integer) rs.getObject("filling_level_in_ml"));
         pump.setPumpedUp(rs.getBoolean("is_pumped_up"));
+
+        // TODO: Implement actual flow sensor data storage.
+        //
+        // TODO: Do not instantiate flowSensor, because Pi4JInputPin is probably not available in mock
+        // configuration.
+        PinUtils pinUtils = SpringUtility.getBean(PinUtils.class);
+        switch ((int) pump.getId()) {
+            case 1: {
+                var inputPin = pinUtils.getBoardInputPin(10, PullResistance.OFF);
+                pump.setFlowSensor(new FlowSensor((Pi4JInputPin) inputPin, 10000));
+            }
+
+                break;
+            case 2: {
+                var inputPin = pinUtils.getBoardInputPin(9, PullResistance.OFF);
+                pump.setFlowSensor(new FlowSensor((Pi4JInputPin) inputPin, 10000));
+            }
+
+                break;
+            case 3: {
+                var inputPin = pinUtils.getBoardInputPin(11, PullResistance.OFF);
+                pump.setFlowSensor(new FlowSensor((Pi4JInputPin) inputPin, 10000));
+            }
+
+                break;
+            default:
+                break;
+        }
+
         return pump;
     }
 }

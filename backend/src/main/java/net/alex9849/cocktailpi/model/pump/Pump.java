@@ -7,6 +7,7 @@ import net.alex9849.cocktailpi.utils.SpringUtility;
 import net.alex9849.motorlib.motor.IMotor;
 
 import java.util.Objects;
+import java.util.Optional;
 
 public abstract class Pump {
     private long id;
@@ -16,6 +17,7 @@ public abstract class Pump {
     private boolean isPumpedUp;
     private AutomatedIngredient currentIngredient;
     private String name;
+    private Optional<FlowSensor> flowSensor = Optional.empty();
 
     public long getId() {
         return id;
@@ -101,6 +103,14 @@ public abstract class Pump {
 
     public boolean isCompleted() {
         return this.isCanPumpUp();
+    }
+
+    public void setFlowSensor(FlowSensor flowSensor) {
+        this.flowSensor = Optional.of(flowSensor);
+    }
+
+    public Optional<FlowSensor> getFlowSensor() {
+        return flowSensor;
     }
 
     protected abstract boolean isHwPinsCompleted();
