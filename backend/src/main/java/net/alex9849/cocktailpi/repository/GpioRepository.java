@@ -221,7 +221,7 @@ public class GpioRepository extends JdbcDaoSupport {
             PreparedStatement pstmt = con.prepareStatement(
                     "SELECT COUNT(distinct gb.id)      AS nr_boards,\n" +
                             "       COUNT(gp.pin_nr)           AS pins_available,\n" +
-                            "       COUNT(ifnull(p.id, o.key)) AS pins_used\n" +
+                            "       COUNT(ifnull(p.id, o.key)) + SUM(case when p.flow_sensor is null then 0 else 1 end) AS pins_used\n" +
                             "from gpio_boards gb\n" +
                             "         LEFT JOIN gpio_pins gp on gb.id = gp.board\n" +
                             "         LEFT JOIN options o on gp.board = o.pin_board and gp.pin_nr = o.pin_nr\n" +

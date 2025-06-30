@@ -3,8 +3,16 @@ package net.alex9849.cocktailpi.model.pump;
 import net.alex9849.motorlib.pin.Pi4JInputPin;
 import net.alex9849.motorlib.sensor.Flow;
 
+import com.pi4j.io.gpio.digital.PullResistance;
+
+import net.alex9849.cocktailpi.model.gpio.Pin;
+import net.alex9849.cocktailpi.utils.PinUtils;
+import net.alex9849.cocktailpi.utils.SpringUtility;
+
 public class FlowSensor {
     private Flow sensor;
+    private int id;
+    private Pin pin;
 
     public enum Status {
         NO_FLOW,
@@ -21,14 +29,21 @@ public class FlowSensor {
     private double currentReading = -1;
     private double lastReading = -1;
 
-    public FlowSensor(Pi4JInputPin pin, int pulsesPerLiter) {
-        sensor = new Flow(pin, pulsesPerLiter);
+    public FlowSensor(Pin pin, int pulsesPerLiter, int id) {
+        PinUtils pinUtils = SpringUtility.getBean(PinUtils.class);
+        var inputPin = pinUtils.getBoardInputPin(pin.getPinNr(), PullResistance.OFF);
+        sensor = new Flow((Pi4JInputPin) inputPin, pulsesPerLiter);
+
+        this.id = id;
+        this.pin = pin;
     }
 
     public void run(long millis) {
-        sensor.run(millis);
-        lastReading = currentReading;
-        currentReading = sensor.read();
+        final boolean isNewValueAvailable = sensor.run(millis);
+        if (isNewValueAvailable) {
+            lastReading = currentReading;
+            currentReading = sensor.read();
+        }
     }
 
     public Status get() {
@@ -37,5 +52,13 @@ public class FlowSensor {
         } else {
             return Status.FLOWING;
         }
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public Pin getPin() {
+        return pin;
     }
 }
