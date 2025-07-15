@@ -6,7 +6,7 @@ import os
 import stat
 import shutil
 
-releases_url = "https://api.github.com/repos/alex9849/CocktailPi/releases"
+releases_url = "https://api.github.com/repos/MartinsSmirnovs/CocktailPi/releases"
 installation_candidate_intermediate_name = "cocktailpi_update.jar"
 update_delta_script_name = "update_linux_delta.sh"
 database_file_name = "cocktailpi-data.db"

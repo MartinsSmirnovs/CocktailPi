@@ -430,7 +430,7 @@ public class SystemService {
         cuResult.setCurrentVersion(this.appVersion);
 
         try {
-            URL releasesUrl = new URL("https://api.github.com/repos/alex9849/CocktailPi/releases");
+            URL releasesUrl = new URL("https://api.github.com/repos/MartinsSmirnovs/CocktailPi/releases");
             Iterator<JsonNode> releases = mapper.readTree(releasesUrl).elements();
 
             String newestCandidateTag = null;
