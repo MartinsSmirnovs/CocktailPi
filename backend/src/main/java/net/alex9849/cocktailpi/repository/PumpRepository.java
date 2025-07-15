@@ -4,10 +4,16 @@ import jakarta.annotation.PostConstruct;
 import jakarta.persistence.DiscriminatorValue;
 import net.alex9849.cocktailpi.model.gpio.GpioBoard;
 import net.alex9849.cocktailpi.model.pump.*;
+import net.alex9849.cocktailpi.utils.PinUtils;
+import net.alex9849.cocktailpi.utils.SpringUtility;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.support.JdbcDaoSupport;
 import org.springframework.stereotype.Component;
+
+import com.pi4j.io.gpio.digital.PullResistance;
+import net.alex9849.motorlib.pin.Pi4JInputPin;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -31,8 +37,9 @@ public class PumpRepository extends JdbcDaoSupport {
             PreparedStatement pstmt = con.prepareStatement("INSERT INTO pumps (dtype, name, " +
                     "completed, tube_capacity, current_ingredient_id, filling_level_in_ml, " +
                     "is_pumped_up, oo_pin_board, oo_pin_nr, time_per_cl_in_ms, is_power_state_high, acceleration, " +
-                    "step_pin_board, step_pin_nr, enable_pin_board, enable_pin_nr, steps_per_cl, max_steps_per_second) VALUES " +
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
+                    "step_pin_board, step_pin_nr, enable_pin_board, enable_pin_nr, steps_per_cl, max_steps_per_second, " +
+                    "flow_sensor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    Statement.RETURN_GENERATED_KEYS);
             setParameters(pump, pstmt);
             pstmt.execute();
             ResultSet rs = pstmt.getGeneratedKeys();
@@ -50,16 +57,16 @@ public class PumpRepository extends JdbcDaoSupport {
                     "completed = ?, tube_capacity = ?, current_ingredient_id = ?, " +
                     "filling_level_in_ml = ?, is_pumped_up = ?, oo_pin_board = ?, oo_pin_nr = ?, time_per_cl_in_ms = ?, " +
                     "is_power_state_high = ?, acceleration = ?, step_pin_board = ?, step_pin_nr = ?, enable_pin_board = ?, " +
-                    "enable_pin_nr = ?, steps_per_cl = ?, max_steps_per_second = ? WHERE id = ?");
+                    "enable_pin_nr = ?, steps_per_cl = ?, max_steps_per_second = ?, flow_sensor = ? WHERE id = ?");
             setParameters(pump, pstmt);
-            pstmt.setLong(19, pump.getId());
+            pstmt.setLong(20, pump.getId());
             return pstmt.executeUpdate() != 0;
         });
     }
 
     public List<Pump> findAll() {
         return getJdbcTemplate().execute((ConnectionCallback<List<Pump>>) con -> {
-            PreparedStatement pstmt = con.prepareStatement("SELECT * FROM pumps");
+            PreparedStatement pstmt = con.prepareStatement("SELECT * FROM pumps_with_dependencies");
             ResultSet rs = pstmt.executeQuery();
             List<Pump> results = new ArrayList<>();
             while (rs.next()) {
@@ -71,7 +78,7 @@ public class PumpRepository extends JdbcDaoSupport {
 
     public List<Pump> findPumpsWithIngredient(long ingredientId) {
         return getJdbcTemplate().execute((ConnectionCallback<List<Pump>>) con -> {
-            PreparedStatement pstmt = con.prepareStatement("SELECT * FROM pumps where current_ingredient_id = ?");
+            PreparedStatement pstmt = con.prepareStatement("SELECT * FROM pumps_with_dependencies where current_ingredient_id = ?");
             pstmt.setLong(1, ingredientId);
             ResultSet rs = pstmt.executeQuery();
             List<Pump> results = new ArrayList<>();
@@ -84,14 +91,14 @@ public class PumpRepository extends JdbcDaoSupport {
 
     public Set<Long> findIngredientIdsOnPump() {
         return getJdbcTemplate().execute((ConnectionCallback<Set<Long>>) con -> {
-            PreparedStatement pstmt = con.prepareStatement("SELECT p.current_ingredient_id as id FROM pumps p WHERE p.current_ingredient_id IS NOT NULL");
+            PreparedStatement pstmt = con.prepareStatement("SELECT p.current_ingredient_id as id FROM pumps_with_dependencies p WHERE p.current_ingredient_id IS NOT NULL");
             return DbUtils.executeGetIdsPstmt(pstmt);
         });
     }
 
     public Optional<Pump> findByBcmPin(int bcmPin) {
         return getJdbcTemplate().execute((ConnectionCallback<Optional<Pump>>) con -> {
-            PreparedStatement pstmt = con.prepareStatement("SELECT * FROM pumps where dc_pin = ? or enable_pin = ? or step_pin = ?");
+            PreparedStatement pstmt = con.prepareStatement("SELECT * FROM pumps_with_dependencies where dc_pin = ? or enable_pin = ? or step_pin = ?");
             pstmt.setInt(1, bcmPin);
             pstmt.setInt(2, bcmPin);
             pstmt.setInt(3, bcmPin);
@@ -105,7 +112,7 @@ public class PumpRepository extends JdbcDaoSupport {
 
     public Optional<Pump> findById(long id) {
         return getJdbcTemplate().execute((ConnectionCallback<Optional<Pump>>) con -> {
-            PreparedStatement pstmt = con.prepareStatement("SELECT * FROM pumps where id = ?");
+            PreparedStatement pstmt = con.prepareStatement("SELECT * FROM pumps_with_dependencies where id = ?");
             pstmt.setLong(1, id);
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) {
@@ -155,7 +162,7 @@ public class PumpRepository extends JdbcDaoSupport {
             pstmt.setNull(17, Types.INTEGER);
             pstmt.setNull(18, Types.INTEGER);
         }
-        else if (pump instanceof StepperPump stepperPump) {
+else if (pump instanceof StepperPump stepperPump) {
             pstmt.setNull(8, Types.INTEGER);
             pstmt.setNull(9, Types.INTEGER);
             pstmt.setNull(10, Types.INTEGER);
@@ -179,6 +186,12 @@ public class PumpRepository extends JdbcDaoSupport {
             pstmt.setObject(18, stepperPump.getMaxStepsPerSecond());
         } else {
             throw new IllegalArgumentException("Unknown Pump type: " + pump.getClass().getName());
+        }
+
+        if (!pump.getFlowSensor().isPresent()) {
+            pstmt.setNull(19, Types.INTEGER);
+        } else {
+            pstmt.setObject(19, pump.getFlowSensor().get().getId());
         }
     }
 
@@ -236,6 +249,17 @@ public class PumpRepository extends JdbcDaoSupport {
         }
         pump.setFillingLevelInMl((Integer) rs.getObject("filling_level_in_ml"));
         pump.setPumpedUp(rs.getBoolean("is_pumped_up"));
+
+        final int flowSensorId = rs.getInt("flow_sensor");
+        if (!rs.wasNull()) {
+            final int flowSensorBoard = rs.getInt("flow_sensor_board");
+            final int flowSensorPin = rs.getInt("flow_sensor_pin_nr");
+            final int flowSensorPPS = rs.getInt("flow_sensor_pps");
+
+            GpioBoard gpioBoard = gpioRepository.findById(flowSensorBoard).orElse(null);
+            pump.setFlowSensor(new FlowSensor(gpioBoard.getPin(flowSensorPin), flowSensorPPS, flowSensorId));
+        }
+
         return pump;
     }
 }

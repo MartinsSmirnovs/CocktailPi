@@ -82,6 +82,11 @@ public class CocktailOrderService {
     }
 
     private void onCocktailProgressSubscriptionChange(CocktailProgress progress) {
+        if(progress.getState() == CocktailProgress.State.INGREDIENT_ENDED) {
+            cancelCocktailOrder();
+            return;
+        }
+
         if(progress.getState() == CocktailProgress.State.CANCELLED || progress.getState() == CocktailProgress.State.FINISHED) {
             this.scheduler.schedule(() -> {
                 this.cocktailFactory = null;

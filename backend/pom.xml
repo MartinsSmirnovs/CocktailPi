@@ -110,10 +110,15 @@
             <artifactId>sqlite-jdbc</artifactId>
             <version>3.42.0.0</version>
         </dependency>
-        <dependency>
+        <!-- <dependency>
             <groupId>net.alex9849.motorlib</groupId>
             <artifactId>motorlib</artifactId>
             <version>0.1.10</version>
+        </dependency> -->
+        <dependency>
+            <groupId>net.alex9849.motorlib</groupId>
+            <artifactId>motorlib</artifactId>
+            <version>0.1.12-flow</version>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

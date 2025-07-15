@@ -146,9 +146,11 @@ public class CocktailFactory {
     }
 
     private void onSubscriptionChange(StepProgress stepProgress) {
-        if(stepProgress instanceof ManualStepProgress) {
+        if (stepProgress.hasIngredientEnded()) {
+            setState(CocktailProgress.State.INGREDIENT_ENDED);
+        } else if (stepProgress instanceof ManualStepProgress) {
             setState(CocktailProgress.State.MANUAL_INGREDIENT_ADD);
-        } else if(stepProgress instanceof WrittenInstructionStepProgress) {
+        } else if (stepProgress instanceof WrittenInstructionStepProgress) {
             setState(CocktailProgress.State.MANUAL_ACTION_REQUIRED);
         } else {
             setState(CocktailProgress.State.RUNNING);

@@ -1,5 +1,7 @@
 package net.alex9849.cocktailpi.service.pumps.cocktailfactory.productionstepworker;
 
+import net.alex9849.cocktailpi.model.pump.DcPump;
+import net.alex9849.cocktailpi.model.pump.FlowSensor;
 import net.alex9849.cocktailpi.model.pump.Pump;
 import net.alex9849.cocktailpi.model.pump.StepperPump;
 import net.alex9849.cocktailpi.model.pump.Valve;
@@ -17,6 +19,7 @@ import java.util.concurrent.*;
 public abstract class AbstractPumpingProductionStepWorker extends AbstractProductionStepWorker {
     private final ScheduledExecutorService scheduler;
     private Thread runner;
+    private Thread flowSensorRunner;
     private Set<PumpPhase> pumpPhases;
     private Map<StepperPump, Long> steppersToSteps;
     private Map<Valve, Long> valvesToRequestedGrams;
@@ -30,6 +33,9 @@ public abstract class AbstractPumpingProductionStepWorker extends AbstractProduc
     private long startTime;
     private long endTime;
 
+    // If a pump with no liquid left is detected, store it here.
+    Optional<Pump> emptyPump;
+
     public AbstractPumpingProductionStepWorker(CocktailFactory cocktailFactory) {
         super(cocktailFactory);
         this.scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -41,6 +47,7 @@ public abstract class AbstractPumpingProductionStepWorker extends AbstractProduc
         this.valvesToPumpedGrams = new HashMap<>();
         this.scheduledPumpFutures = new HashSet<>();
         this.notUsedLiquid = new HashMap<>();
+        this.emptyPump = Optional.empty();
     }
 
     protected synchronized void setDcPumpPhases(Set<PumpPhase> pumpPhases) {
@@ -176,6 +183,56 @@ public abstract class AbstractPumpingProductionStepWorker extends AbstractProduc
 
             onFinish();
         };
+
+        Runnable flowSensorTask = () -> {
+            try {
+                while (true) {
+                    for (var pump : usedPumps) {
+                        if (Thread.interrupted()) {
+                            throw new InterruptedException();
+                        }
+
+                        if (!pump.getFlowSensor().isPresent()) {
+                            continue;
+                        }
+
+                        var sensor = pump.getFlowSensor().get();
+
+                        if (pump instanceof DcPump) {
+                            var dcPump = (DcPump) pump;
+                            if (!dcPump.getMotorDriver().isRunning()) {
+                                continue;
+                            }
+
+                            final long now = System.currentTimeMillis();
+                            sensor.run(now);
+                            final var flowStatus = sensor.get();
+                            if (flowStatus == FlowSensor.Status.NO_FLOW) {
+                                pump.setFillingLevelInMl(0);
+                                emptyPump = Optional.of(pump);
+                                return;
+                            }
+                        }
+
+                        if (pump instanceof StepperPump) {
+                            // TODO: Implement.
+                        }
+
+                        if (pump instanceof Valve) {
+                            // TODO: Implement.
+                        }
+                    }
+                }
+
+            } catch (InterruptedException e) {
+                return;
+            }
+        };
+
+        flowSensorRunner = new Thread(flowSensorTask);
+        flowSensorRunner.setPriority(Thread.NORM_PRIORITY);
+        flowSensorRunner.start();
+
         runner = new Thread(runTask);
         runner.setPriority(Thread.MAX_PRIORITY);
         runner.start();
@@ -196,7 +253,15 @@ public abstract class AbstractPumpingProductionStepWorker extends AbstractProduc
                 this.runner.interrupt();
                 this.runner.join();
             } catch (InterruptedException e) {
-                //Ignore
+                // Ignore
+            }
+        }
+        if (this.flowSensorRunner != null) {
+            try {
+                this.flowSensorRunner.interrupt();
+                this.flowSensorRunner.join();
+            } catch (InterruptedException e) {
+                // Ignore
             }
         }
         if(this.notifierTask != null) {
@@ -230,6 +295,7 @@ public abstract class AbstractPumpingProductionStepWorker extends AbstractProduc
             }
         }
         notUsedLiquidByPumpPrecise.forEach((key, value) -> notUsedLiquid.put(key, (int) Math.round(value)));
+        emptyPump.ifPresent(notUsedLiquid::remove);
 
         this.stopAllPumps();
         if (!this.scheduler.isShutdown()) {
@@ -246,6 +312,7 @@ public abstract class AbstractPumpingProductionStepWorker extends AbstractProduc
         } else {
             progress.setPercentCompleted(0);
         }
+        progress.setHasIngredientEnded(emptyPump.isPresent());
         progress.setFinished(this.isFinished());
         return progress;
     }

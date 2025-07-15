@@ -3,6 +3,15 @@ package net.alex9849.cocktailpi.service.pumps.cocktailfactory.productionstepwork
 public class StepProgress {
     private boolean finished;
     private int percentCompleted;
+    private boolean ingredientEnded;
+
+    public boolean hasIngredientEnded() {
+        return ingredientEnded;
+    }
+
+    public void setHasIngredientEnded(boolean ended) {
+        this.ingredientEnded = ended;
+    }
 
     public int getPercentCompleted() {
         return percentCompleted;
